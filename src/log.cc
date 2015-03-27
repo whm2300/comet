@@ -1,9 +1,9 @@
 #include "log.h"
+#include "shared_data.h"
 
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-//#include <sys/types.h>
 #include <pthread.h>
 #include <fcntl.h>
 
@@ -18,7 +18,7 @@ SingletonLog *SingletonLog::get_instance()
 {
     return _instance;
 }
-SingletonLog::SingletonLog()
+SingletonLog::SingletonLog():_file(NULL)
 {}
 
 SingletonLog::~SingletonLog()
@@ -71,37 +71,6 @@ bool SingletonLog::close_log()
     return true;
 }
 
-void SingletonLog::write_log(LOG_LEVEL log_level, const char *fmt, ...)
-{
-    if (log_level > _log_level)
-      return ;
-
-    time_t time;
-    struct timeval tv;
-    struct tm *tm;
-    gettimeofday(&tv, NULL);
-    time = tv.tv_sec;
-    tm = localtime(&time);
-
-    char buffer[MAX_MSG_LENGTH];
-    int len = sprintf(buffer, "[%04d-%02d-%02d %02d:%02d:%02d.%06d] [%lx] %s:", tm->tm_year + 1900, tm->tm_mon + 1, 
-                tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec), 
-                pthread_self(), SingletonLog::get_level_name(log_level));
-    if (len < 0)
-      return ;
-
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(buffer+len, MAX_MSG_LENGTH-len, fmt, ap);
-    va_end(ap);
-
-    len = strlen(buffer);
-    char *end = buffer + len;
-    *end ++ = '\n';
-    *end = '\0';
-    write(_log_fd, buffer, len + 1);
-}
-
 inline const char *SingletonLog::get_level_name(LOG_LEVEL level)
 {
     switch (level){
@@ -120,4 +89,36 @@ inline const char *SingletonLog::get_level_name(LOG_LEVEL level)
         default:
                 return "";
     }
+}
+
+void SingletonLog::write_log(LOG_LEVEL log_level, const char *fmt, ...)
+{
+    if (log_level > _log_level)
+      return ;
+
+    time_t time;
+    struct timeval tv;
+    struct tm *tm;
+    gettimeofday(&tv, NULL);
+    time = tv.tv_sec;
+    tm = localtime(&time);
+
+    char buffer[MAX_MSG_LENGTH];
+    int len = sprintf(buffer, "[%04d-%02d-%02d %02d:%02d:%02d.%06d] [%d] %s:", tm->tm_year + 1900, tm->tm_mon + 1, 
+                tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec), 
+                *(int *)pthread_getspecific(SharedData::get_instance()->get_pthread_key()), 
+                SingletonLog::get_level_name(log_level));
+    if (len < 0)
+      return ;
+
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buffer+len, MAX_MSG_LENGTH-len, fmt, ap);
+    va_end(ap);
+
+    len = strlen(buffer);
+    char *end = buffer + len;
+    *end ++ = '\n';
+    *end = '\0';
+    write(_log_fd, buffer, len + 1);
 }

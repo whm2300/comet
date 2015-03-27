@@ -23,7 +23,7 @@ class SingletonLog
             WARN = 2,
             INFO = 3,
             DEBUG = 4,
-            TRACE = 5
+            TRACE = 5,
         };
 
     public:
@@ -35,20 +35,21 @@ class SingletonLog
 
         void write_log(LOG_LEVEL log_level, const char *fmt, ...);
 
-
     private:
         SingletonLog();
         ~SingletonLog();
         SingletonLog(const SingletonLog&);
         SingletonLog& operator= (const SingletonLog&);
 
+        enum LOG_LEVEL get_log_level(const std::string &log_level);
         inline static const char *get_level_name(LOG_LEVEL level);
-        LOG_LEVEL get_log_level(const std::string &log_level);
 
     private:
         static SingletonLog *_instance;
 
         int _log_fd;
+        FILE *_file;
+
         LOG_LEVEL _log_level;
         std::string _base_file_path;
 
