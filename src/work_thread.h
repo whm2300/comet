@@ -11,6 +11,7 @@
 
 #include "shared_struct.h"
 #include "analyse_req.h"
+#include "comet.pb.h"
 
 #include <unordered_map>
 
@@ -19,56 +20,24 @@
 #include <async.h>
 #include <libevent.h>
 
-/*
-struct hash64shift
-{
-    uint64_t operator()(uint64_t key)
-    {
-        key = (~key) + (key << 21); // key = (key << 21) - key - 1;
-        key = key ^ (key >> 24);
-        key = key ^ (key >> 14);
-        key = (key + (key << 2)) + (key << 4); // key * 21
-        key = key ^ (key >> 28);
-        key = key + (key << 31);
-        return key; 
-    }
-};
-
-struct hash_intptr
-{
-    uint64_t operator() (intptr_t ptr)
-    {
-        int64_t key  = ptr&0xFFFFFFFFFFFFFFFF;
-        key = (~key) + (key << 21); // key = (key << 21) - key - 1;
-        key = key ^ (key >> 24);
-        key = key ^ (key >> 14);
-        key = (key + (key << 2)) + (key << 4); // key * 21
-        key = key ^ (key >> 28);
-        key = key + (key << 31);
-        return key; 
-    }
-};
-
-struct cmp_64
-{
-    bool operator() (const uint64_t lhs, const uint64_t rhs)
-    {
-        return lhs == rhs;
-    }
-};
-
-struct cmp_ptr
-{
-    bool operator() (const intptr_t lhs, const intptr_t rhs)
-    {
-        return lhs == rhs;
-    }
-};
-*/
 
 class Subscriber;
 typedef std::unordered_map<uint64_t, Subscriber *> SubMap;
 typedef std::unordered_map<intptr_t, uint64_t > IntMap;
+
+class WorkThread;
+typedef struct tagOnlineInfo
+{
+    uint64_t           id;  //上线id
+    struct bufferevent *bev;
+    WorkThread         *work_thread;
+}OnlineInfo;
+
+typedef struct tagOfflineInfo
+{
+    uint64_t           id;  //下线id
+    WorkThread         *work_thread;
+}OfflineInfo;
 
 class WorkThread
 {
@@ -91,6 +60,11 @@ class WorkThread
         static void redis_connect_callback(const redisAsyncContext *c, int status);
         static void redis_disconnect_callback(const redisAsyncContext *c, int status);
         static void redis_login_callback(redisAsyncContext *c, void *r, void *privdata);
+        static void redis_trans_callback(redisAsyncContext *c, void *r, void *privdata);
+        //上线通知，从redis中检测是否存在好友音箱，下发好友音箱在线/离线状态
+        static void redis_online_notify(redisAsyncContext *c, void *r, void *privdata);
+        //下线通知，检测redis好友列表，向在线好友下发下线通知
+        static void redis_offline_notify(redisAsyncContext *c, void *r, void *privdata);
 
     public:
         bool init_work(const int work_num, PthreadInfo *work_thread, const int work_thread_num, 
@@ -99,14 +73,17 @@ class WorkThread
         bool asy_open_redis(const char *ip, const int port, const int db_num);
 
         //新连接或命令
-        bool notify_new_conn(int fd){return write(_pipe_fd[1], &fd, sizeof(fd)) == sizeof(fd);}
-        bool notify_new_msg(intptr_t ptr){return write(_socketpair[1], &ptr, sizeof(ptr)) == sizeof(ptr);}
+        bool notify_new_conn(int fd){return write(_new_conn_fd[1], &fd, sizeof(fd)) == sizeof(fd);}
+        bool notify_new_msg(intptr_t ptr);
+
+        bool check_id_is_online(uint64_t id){return _sub_map.find(id) != _sub_map.end();}
 
         void free_data();
         int get_conn_num(){return _conn_num;}
 
     protected:
         void del_expire_client();
+        bool setnonblock(int fd);
 
     private:
         struct event_base *_evbase;
@@ -117,13 +94,16 @@ class WorkThread
         PthreadInfo *_work_thread;  //所有线程信息
         int          _work_thread_num;  //所有线程数目
 
-        int         _pipe_fd[2];   //新连接通知
-        int         _socketpair[2];  //新消息通知
+        int         _new_conn_fd[2];   //新连接通知
+        int         _new_msg_fd[2];  //新消息通知
 
         SubMap      _sub_map;  //id to sub
         IntMap      _bev_id;  //bev to id
         AnalyseReq  _analyse_req;
         redisAsyncContext *_redis;
+
+        eglcomet::OnlineStatus _online_status;  //好友音箱的在线状态
+        eglcomet::OnlineStatus _me_status;  //自己的在线状态
 };
 
 #endif  //_WORK_THREAD_H_

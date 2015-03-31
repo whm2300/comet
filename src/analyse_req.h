@@ -24,10 +24,9 @@ typedef struct tagTransData
 {
     int64_t         from_id;
     int64_t         to_id;
-    char            expire_type;
+    intptr_t        work_thread;  //src thread
     int             data_size;
     unsigned char   data[0];
-    intptr_t        work_thread;
 }TransData;
 
 class AnalyseReq
@@ -37,6 +36,8 @@ class AnalyseReq
         ~AnalyseReq();
 
         bool analyse_data(struct evbuffer *input, struct evbuffer *output);
+
+        bool pack_data(unsigned char *src, const int src_len, const int property_id, unsigned char *des, int &des_len);
         
         bool is_heart();
         void init_data();

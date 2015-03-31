@@ -136,6 +136,10 @@ bool Server::init_work_thread()
 
 int Server::run_server()
 {
+    if (!start_listen()){
+        return -1;
+    }
+
     {
         int pidfile = open(_config_info.pid_file_path.c_str(), O_WRONLY | O_CREAT, 
                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
@@ -149,7 +153,6 @@ int Server::run_server()
         ::close(pidfile);
     }
 
-    start_listen();
     int res = event_base_dispatch(_evbase);
 
     log_debug("%s", "main loop exit");

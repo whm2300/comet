@@ -75,6 +75,7 @@ bool AnalyseReq::analyse_pack(struct evbuffer *input, const int head_len,
 {
     int pack_size = head_len + data_head_len + data_len;
     unsigned char *pack_bag = evbuffer_pullup(input, pack_size);
+    
     if (pack_bag == NULL){
         return false;
     }
@@ -82,15 +83,15 @@ bool AnalyseReq::analyse_pack(struct evbuffer *input, const int head_len,
     if (pack_bag[1]&0x40){  //转发包
         log_debug("%s", "get trans data");
         _trans_data = (TransData *) new unsigned char[sizeof(TransData) + pack_size];
-        char *p = (char *)_trans_data->to_id;
+        unsigned char *p = (unsigned char *)&_trans_data->to_id;
         for (int i = 7; i > -1;){
-            *p++ = pack_bag[12 + i--];
+            *p++ = (pack_bag + 12)[i--];
         }
-        p = (char *)_trans_data->from_id;
+        p = (unsigned char *)&_trans_data->from_id;
         for (int i = 7; i > -1;){
-            *p = pack_bag[4 + i--];
+            *p++ = (pack_bag + 4)[i--];
         }
-        _trans_data->expire_type = pack_bag[2];
+        log_debug("analyse_pack, from_id:%ld, to_id:%ld", _trans_data->from_id, _trans_data->to_id);
         _trans_data->data_size = pack_size;
         evbuffer_remove(input, _trans_data->data, pack_size);
     }
@@ -173,7 +174,40 @@ unsigned char *AnalyseReq::get_login_rsp(const bool is_success, const std::strin
     rsp_data[3] = 0x0;  //RES
     int16_t net_id = htons(11);
     memcpy(rsp_data+20, &net_id, 2);
+    memset(rsp_data+4, 0, 8);
+    memset(rsp_data+12, 0, 8);
+    char format = 0x01;
+    memcpy(rsp_data+22, &format, 1);
     return rsp_data;
+}
+
+bool AnalyseReq::pack_data(unsigned char *src, const int src_len, 
+                           const int property_id, unsigned char *des, int &des_len)
+{
+    if (src_len > 0xFF00){
+        des_len = 20 + 9 + src_len;
+        des[23] = 0xFF;
+        des[24] = 0x00;
+        uint32_t net_size = htonl(src_len);
+        memcpy(des+25, &net_size, 4);
+        memcpy(des+29, src, src_len);
+    }
+    else{
+        des_len = 20 + 5 + src_len;
+        uint16_t net_size = htons(src_len);
+        memcpy(des+23, &net_size, sizeof(net_size));
+        memcpy(des+25, src, src_len);
+    }
+    des[0] = 0x10 | (20/4);
+    des[1] = 0x0;
+    des[3] = 0x0;
+    int16_t net_id = htons(12);
+    memcpy(des+20, &net_id, 2);
+    char format = 0x01;
+    memcpy(des+22, &format, 1);
+    memset(des+4, 0, 8);
+    memset(des+12, 0, 8);
+    return true;
 }
 
 LoginData *AnalyseReq::get_login_data()
