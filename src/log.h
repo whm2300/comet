@@ -3,15 +3,23 @@
 #   Description : 日志文件类
 #        Author : chenqingming chenqingming0710@163.com
 #        create : 2015-03-05 15:29
-# Last modified : 2015-03-23 11:53
+# Last modified : 2015-04-08 21:26
 =============================================================================*/
 
 #ifndef _LOG_H_
 #define _LOG_H_
 
+#include <event2/event.h>
+
 #include <string>
 
 #define MAX_MSG_LENGTH 1024  //单个消息最大长度
+
+typedef struct tagThreadInfo
+{
+    int32_t thread_id;
+    struct event_base *evbase;
+}ThreadInfo;
 
 class SingletonLog
 {
@@ -68,22 +76,22 @@ class SingletonLog
 };
 
 #define log_fatal(fmt, args...) \
-    SingletonLog::get_instance()->write_log(SingletonLog::FATAL, fmt, ##args)
+    SingletonLog::get_instance()->write_log(SingletonLog::FATAL, "[%s(%d)]: " fmt, __FILE__, __LINE__, ##args)
 
 #define log_error(fmt, args...) \
-    SingletonLog::get_instance()->write_log(SingletonLog::ERROR, fmt, ##args)
+    SingletonLog::get_instance()->write_log(SingletonLog::ERROR, "[%s(%d)]: " fmt, __FILE__, __LINE__, ##args)
 
 #define log_warn(fmt, args...) \
-    SingletonLog::get_instance()->write_log(SingletonLog::WARN, fmt, ##args)
+    SingletonLog::get_instance()->write_log(SingletonLog::WARN, "[%s(%d)]: " fmt, __FILE__, __LINE__, ##args)
 
 #define log_info(fmt, args...) \
-    SingletonLog::get_instance()->write_log(SingletonLog::INFO, fmt, ##args)
+    SingletonLog::get_instance()->write_log(SingletonLog::INFO, "[%s(%d)]: " fmt, __FILE__, __LINE__, ##args)
 
 #define log_debug(fmt, args...) \
-    SingletonLog::get_instance()->write_log(SingletonLog::DEBUG, fmt, ##args)
+    SingletonLog::get_instance()->write_log(SingletonLog::DEBUG, "[%s(%d)]: " fmt, __FILE__, __LINE__, ##args)
 
 #define log_trace(fmt, args...) \
-    SingletonLog::get_instance()->write_log(SingletonLog::TRACE, fmt, ##args)
+    SingletonLog::get_instance()->write_log(SingletonLog::TRACE, "[%s(%d)]: " fmt, __FILE__, __LINE__, ##args)
 
 
 #endif //_LOG_H_

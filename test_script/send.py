@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!usr/bin/env python
 #-*- utf-8 -*-
 
 import socket
@@ -71,7 +71,7 @@ while True:
         print "res:0x%x" % res
 
     while True:
-        #time.sleep(1)
+        time.sleep(5)
 
         song = comet_pb2.Song()
         song.song_id = "1111"
@@ -83,4 +83,4 @@ while True:
         data = struct.pack("!HBH", 22, 1, len(song.SerializeToString())) + song.SerializeToString()
         s.send(head + data)
         print "send ok"
-        #time.sleep(100)
+        time.sleep(100)

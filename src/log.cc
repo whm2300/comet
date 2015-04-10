@@ -96,17 +96,19 @@ void SingletonLog::write_log(LOG_LEVEL log_level, const char *fmt, ...)
     if (log_level > _log_level)
       return ;
 
+    ThreadInfo *thread_info = (ThreadInfo *)pthread_getspecific(SharedData::get_instance()->get_pthread_key());
+
     time_t time;
     struct timeval tv;
     struct tm *tm;
-    gettimeofday(&tv, NULL);
+    event_base_gettimeofday_cached(thread_info->evbase, &tv);
     time = tv.tv_sec;
     tm = localtime(&time);
 
     char buffer[MAX_MSG_LENGTH];
     int len = sprintf(buffer, "[%04d-%02d-%02d %02d:%02d:%02d.%06d] [%d] %s:", tm->tm_year + 1900, tm->tm_mon + 1, 
                 tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (int)(tv.tv_usec), 
-                *(int *)pthread_getspecific(SharedData::get_instance()->get_pthread_key()), 
+                thread_info->thread_id,
                 SingletonLog::get_level_name(log_level));
     if (len < 0)
       return ;

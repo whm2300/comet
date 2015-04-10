@@ -8,8 +8,8 @@ import struct
 import comet_pb2 
 
 login = comet_pb2.C2SLogin()
-login.id = 20000016
-login.token = 'fce92ad5c6aa0f8e2d11d2c0868ec2bd'
+login.id = 1000001
+login.token = 'fCqciWmRYIHFVhQzpasoAJbKDrtENBkd'
 login.user_agent = "abcdef"
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

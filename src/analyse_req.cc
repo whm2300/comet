@@ -118,6 +118,7 @@ bool AnalyseReq::analyse_pack(struct evbuffer *input, const int head_len,
 
             case 12 :
                 log_error("%s", "not handle check yet");
+                evbuffer_drain(input, head_len+data_head_len+data_len);
                 break;
 
             default :
@@ -171,6 +172,7 @@ unsigned char *AnalyseReq::get_login_rsp(const bool is_success, const std::strin
     }
     rsp_data[0] = 0x10|(20/4);  //版本和头部长度
     rsp_data[1] = 0x0;  //NALU
+    rsp_data[2] = 0x0;  //TTL
     rsp_data[3] = 0x0;  //RES
     int16_t net_id = htons(11);
     memcpy(rsp_data+20, &net_id, 2);
@@ -228,4 +230,85 @@ bool AnalyseReq::is_heart()
     bool r = _is_heart;
     _is_heart= false;
     return r;
+}
+
+int AnalyseReq::get_login_post_data(const int64_t id, const std::string &token, 
+                                    const std::string &url, char *data)
+{
+    _check_id_req.Clear();
+    _serialize_str.clear();
+    _check_id_req.set_id(id);
+    _check_id_req.set_token(token);
+    _check_id_req.SerializePartialToString(&_serialize_str);
+
+    return pack_post_data(data, (char *)"ReqCheckTokenByID", url);
+}
+
+bool AnalyseReq::analyse_login_data(char *data, int len)
+{
+    if (!analyse_post_data(data, len)){
+        return false;
+    }
+    _check_id_rsp.ParseFromString(_rsp.params(0));
+    log_debug("http login. %d, %s", _check_id_rsp.rescode(), _check_id_rsp.resmsg().c_str());
+    return _check_id_rsp.rescode() == 0;
+}
+
+int AnalyseReq::get_relation_post_data(const int64_t from_id, const int64_t to_id, 
+                                       const std::string &url, char *data)
+{
+    _serialize_str.clear();
+    _check_relation_req.Clear();
+    _check_relation_req.set_fromid(from_id);
+    _check_relation_req.set_toid(to_id);
+    _check_relation_req.SerializePartialToString(&_serialize_str);
+    return pack_post_data(data, (char *)"ReqCheckRelationByID", url);
+}
+
+bool AnalyseReq::analyse_relation_data(char *data, int len)
+{
+    if (!analyse_post_data(data, len))
+      return false;
+
+    _check_relation_rsp.ParseFromString(_rsp.params(0));
+    log_debug("http trans. %d, %s", _check_relation_rsp.rescode(), _check_relation_rsp.resmsg().c_str());
+    return _check_relation_rsp.rescode() == 0;
+}
+
+int AnalyseReq::pack_post_data(char *data, char *action, const std::string &url)
+{
+    _req.Clear();
+    _req.set_mask(0);
+    _req.set_udi("ei=1&ai=1&bd=pada");
+    _req.set_reqno(0);
+    _req.set_rsakeyver("1");
+    _req.set_clientid(111);
+    _req.add_action(action);
+    _req.add_params(_serialize_str.c_str());
+    _serialize_str.clear();
+    _req.SerializePartialToString(&_serialize_str);
+
+    const char *http_post = "POST / HTTP/1.1\r\n"
+                            "Host:%s\r\n"
+                            "Content-Length:%d\r\n\r\n";
+    sprintf(data, http_post, url.c_str(), _serialize_str.size());
+    log_debug("%s", data);
+    int len = strlen(data);
+    memcpy(data+len, _serialize_str.c_str(), _serialize_str.size());
+    return len+_serialize_str.size();
+}
+
+bool AnalyseReq::analyse_post_data(char *data, int len)
+{
+    int end_pos = len;
+    int start_pos = end_pos - 1;
+    while ((data[start_pos] != 0x0a || data[start_pos - 1] != 0x0d) && start_pos > 1) start_pos--;
+
+    _rsp.ParseFromArray(data + start_pos + 1, end_pos - start_pos - 1);
+    log_debug("%d, %s", _rsp.rescode(), _rsp.resmsg().c_str());
+    if (_rsp.params_size() == 0){
+        log_error("%s", "analyse response post data error. params size is 0.");
+        return false;
+    }
+    return true;
 }

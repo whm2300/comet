@@ -66,9 +66,18 @@ class WorkThread
         //下线通知，检测redis好友列表，向在线好友下发下线通知
         static void redis_offline_notify(redisAsyncContext *c, void *r, void *privdata);
 
+        //http callback
+        static void http_login_read(struct bufferevent *bev, void *ctx);
+        static void http_login_write(struct bufferevent *bev, void *ctx);
+        static void http_login_event(struct bufferevent *bev, short event, void *ctx);
+
+        static void http_trans_read(struct bufferevent *bev, void *ctx);
+        static void http_trans_write(struct bufferevent *bev, void *ctx);
+        static void http_trans_event(struct bufferevent *bev, short event, void *ctx);
+
     public:
         bool init_work(const int work_num, PthreadInfo *work_thread, const int work_thread_num, 
-                       const int max_num_per_thread, const int ping_time);
+                       const int max_num_per_thread, const int ping_time, const std::string &http_url, const std::string &http_ip);
         //须在init_work之后调用
         bool asy_open_redis(const char *ip, const int port, const int db_num);
 
@@ -84,6 +93,8 @@ class WorkThread
     protected:
         void del_expire_client();
         bool setnonblock(int fd);
+        bool http_login_check(LoginData *login_data);
+        bool http_trans_check(TransData *trans_data);
 
     private:
         struct event_base *_evbase;
@@ -96,6 +107,9 @@ class WorkThread
 
         int         _new_conn_fd[2];   //新连接通知
         int         _new_msg_fd[2];  //新消息通知
+
+        std::string _http_url;
+        std::string _http_ip;
 
         SubMap      _sub_map;  //id to sub
         IntMap      _bev_id;  //bev to id

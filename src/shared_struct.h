@@ -9,6 +9,8 @@ struct Config
     std::string logger_level;
     std::string logger_path;
     std::string redis_ip;
+    std::string http_url;
+    std::string http_ip;
     int         listen;
     int         redis_port;
     int         redis_db;

@@ -47,6 +47,8 @@ void Server::analyse_config(std::string &config_path)
     _config_info.redis_port = pt.get<int>("redis.port");
     _config_info.redis_db = pt.get<int>("redis.db_num");
 
+    _config_info.http_url = pt.get<std::string>("http.url");
+
     std::string is_daemon = pt.get<std::string>("daemon");
     if (is_daemon == std::string("on")){
         _config_info.is_daemon = true;
@@ -58,11 +60,18 @@ void Server::analyse_config(std::string &config_path)
 
 bool Server::init_server()
 {
-    //shared data. 
-    if (!SharedData::get_instance()->create_pthread_key()){
+    //get http ip
+    struct hostent *h;
+    if ((h = gethostbyname(_config_info.http_url.c_str())) == NULL){
         return false;
     }
-    if (pthread_setspecific(SharedData::get_instance()->get_pthread_key(), &_main_thread_id) != 0){
+    char ip[32];
+    memset(ip, 0, 32);
+    inet_ntop(h->h_addrtype, h->h_addr, ip, sizeof(ip));
+    _config_info.http_ip = ip;
+
+    //shared data. 
+    if (!SharedData::get_instance()->create_pthread_key()){
         return false;
     }
 
@@ -72,18 +81,17 @@ bool Server::init_server()
         return false;
     }
 
-    //pid file
-    if (access(_config_info.pid_file_path.c_str(), F_OK) == 0){
-        log_info("pidfile exist. path:%s", _config_info.pid_file_path.c_str());
-        return false;
-    }
-
     //libevent
     event_set_log_callback(log_for_libevent);
     event_enable_debug_mode();
     _evbase = event_base_new();
     if (_evbase == NULL){
-        log_fatal("%s", "create evbase error");
+        return false;
+    }
+    ThreadInfo *thread_info = new ThreadInfo;
+    thread_info->thread_id = _main_thread_id;
+    thread_info->evbase = _evbase;
+    if (pthread_setspecific(SharedData::get_instance()->get_pthread_key(), thread_info) != 0){
         return false;
     }
     log_info("use method:%s, %ld", event_base_get_method(_evbase), _evbase);
@@ -91,34 +99,36 @@ bool Server::init_server()
         return false;
     }
 
-    sigset_t bset;
-    sigemptyset(&bset);
-    sigaddset(&bset, SIGINT);
-    sigaddset(&bset, SIGTERM);
-    if (sigprocmask(SIG_BLOCK, &bset, NULL) != 0){
-        log_error("%s", "block SIG error");
+    //pid file
+    if (access(_config_info.pid_file_path.c_str(), F_OK) == 0){
+        log_info("pidfile exist. path:%s", _config_info.pid_file_path.c_str());
         return false;
     }
-    //init work thread
-    if (!init_work_thread()){
-        return false;
-    }
-    if (sigprocmask(SIG_UNBLOCK, &bset, NULL) != 0){
-        log_error("%s", "unblock SIG error");
-        return false;
-    }
+
+    log_info("pidfile:%s", _config_info.pid_file_path.c_str());
+    log_info("logger.level:%s", _config_info.logger_level.c_str());
+    log_info("logger.path:%s", _config_info.logger_path.c_str());
+    log_info("server.listen:%d", _config_info.listen);
+    log_info("server.work_thread:%d", _config_info.work_thread_num);
+    log_info("server.max_num_per_thread:%d", _config_info.max_num_per_thread);
+    log_info("server.heartbeat_time:%d", _config_info.heartbeat_time);
+    log_info("redis.ip:%s", _config_info.redis_ip.c_str());
+    log_info("redis.port:%d", _config_info.redis_port);
+    log_info("redis.db_num:%d", _config_info.redis_db);
+    log_info("http.url:%s", _config_info.http_url.c_str());
+
 
     return true;
 }
 
-bool Server::init_work_thread()
+bool Server::start_work_thread()
 {
     _work_thread_num = _config_info.work_thread_num;
     _work_thread = new PthreadInfo[_work_thread_num];
     for (int i = 0; i < _work_thread_num; ++i){
         _work_thread[i].work_thread = new WorkThread();
         if (!_work_thread[i].work_thread->init_work(i+1, _work_thread, _work_thread_num, 
-                        _config_info.max_num_per_thread, _config_info.heartbeat_time)
+                        _config_info.max_num_per_thread, _config_info.heartbeat_time, _config_info.http_url, _config_info.http_ip)
                     || !_work_thread[i].work_thread->asy_open_redis(_config_info.redis_ip.c_str(), 
                 _config_info.redis_port, _config_info.redis_db)){
             log_error("init work thread error. %d", i);
@@ -136,7 +146,25 @@ bool Server::init_work_thread()
 
 int Server::run_server()
 {
+
     if (!start_listen()){
+        return -1;
+    }
+
+    sigset_t bset;
+    sigemptyset(&bset);
+    sigaddset(&bset, SIGINT);
+    sigaddset(&bset, SIGTERM);
+    if (sigprocmask(SIG_BLOCK, &bset, NULL) != 0){
+        log_error("%s", "block SIG error");
+        return -1;
+    }
+    //start work thread
+    if (!start_work_thread()){
+        return -1;
+    }
+    if (sigprocmask(SIG_UNBLOCK, &bset, NULL) != 0){
+        log_error("%s", "unblock SIG error");
         return -1;
     }
 
@@ -265,6 +293,11 @@ bool Server::start_listen()
     int listen_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (listen_fd == -1){
         log_error("get listen socket error. %s", strerror(errno));
+        return false;
+    }
+    int optval = 1;
+    if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1){
+        log_error("set socket opt fail. %s", strerror(errno));
         return false;
     }
     if (bind(listen_fd, (struct sockaddr*)&addr, sizeof(addr)) != 0){

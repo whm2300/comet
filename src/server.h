@@ -35,7 +35,7 @@ class Server
         void analyse_config(std::string &config_path);
         bool is_daemon(){return _config_info.is_daemon;}
         bool init_server();
-        bool init_work_thread();
+        bool start_work_thread();
         bool start_listen();
         int  run_server();
         void close_server();
