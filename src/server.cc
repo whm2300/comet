@@ -318,6 +318,7 @@ bool Server::start_listen()
 void Server::accept_callback(evutil_socket_t fd, short events, void *user_data)
 {
     Server *server = (Server *)user_data;
+
     int min_count = server->_work_thread[0].work_thread->get_conn_num();
     int min_index = 0;
     for (int i = 1; i < server->_work_thread_num; ++i){
@@ -327,10 +328,23 @@ void Server::accept_callback(evutil_socket_t fd, short events, void *user_data)
         }
     }
 
-    if (min_count > server->_config_info.max_num_per_thread){
-        return ;
+    if (min_count < server->_config_info.max_num_per_thread){
+        int conn_fd = accept4(fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        if (conn_fd != -1){
+            server->_work_thread[min_index].work_thread->notify_new_conn(conn_fd);
+        }
     }
 
-    int conn_fd = accept4(fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
-    server->_work_thread[min_index].work_thread->notify_new_conn(conn_fd);
+    /*
+       int conn_fd = accept4(fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+    if (conn_fd != -1){
+        int thread_index = conn_fd % server->_work_thread_num;
+        if (server->_work_thread[thread_index].work_thread->get_conn_num() < server->_config_info.max_num_per_thread){
+            server->_work_thread[thread_index].work_thread->notify_new_conn(conn_fd);
+        }
+        else{
+            close(conn_fd);
+        }
+    }
+    */
 }

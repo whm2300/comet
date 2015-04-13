@@ -113,9 +113,9 @@ void WorkThread::notify_new_conn_callback(evutil_socket_t fd, short event, void 
     WorkThread *work_thread = (WorkThread *)user_data;
     int data;
 
-    log_debug("in notify_new_conn_callback");
-    while (read(fd, &data, sizeof(data)) == sizeof(data)){
-        log_debug("new conn:%d", data);
+    int i = 0;
+    while (read(fd, &data, sizeof(data)) == sizeof(data) && i < 10){
+        ++i;
         if (data > 0){  // new connection
             struct bufferevent *bev = bufferevent_socket_new(work_thread->_evbase, data, BEV_OPT_CLOSE_ON_FREE);
             bufferevent_setcb(bev, bufferevent_read_callback, NULL, bufferevent_event_callback, user_data);
@@ -133,7 +133,6 @@ void WorkThread::notify_new_conn_callback(evutil_socket_t fd, short event, void 
             }
         }
     }
-    log_debug("out notify_new_conn_callback");
 }
 
 bool WorkThread::notify_new_msg(intptr_t ptr)
