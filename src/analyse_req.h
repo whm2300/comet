@@ -13,7 +13,7 @@
 //登录信息包
 typedef struct tagLoginData
 {
-    int64_t id;
+    uint64_t id;
     std::string token;
     intptr_t  work_thread;
     intptr_t  bev;
@@ -22,8 +22,8 @@ typedef struct tagLoginData
 //转发信息包。
 typedef struct tagTransData
 {
-    int64_t         from_id;
-    int64_t         to_id;
+    uint64_t         from_id;
+    uint64_t         to_id;
     intptr_t        work_thread;  //src thread
     int             data_size;
     unsigned char   data[0];

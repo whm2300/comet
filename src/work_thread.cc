@@ -113,7 +113,9 @@ void WorkThread::notify_new_conn_callback(evutil_socket_t fd, short event, void 
     WorkThread *work_thread = (WorkThread *)user_data;
     int data;
 
+    log_debug("in notify_new_conn_callback");
     while (read(fd, &data, sizeof(data)) == sizeof(data)){
+        log_debug("new conn:%d", data);
         if (data > 0){  // new connection
             struct bufferevent *bev = bufferevent_socket_new(work_thread->_evbase, data, BEV_OPT_CLOSE_ON_FREE);
             bufferevent_setcb(bev, bufferevent_read_callback, NULL, bufferevent_event_callback, user_data);
@@ -131,8 +133,8 @@ void WorkThread::notify_new_conn_callback(evutil_socket_t fd, short event, void 
             }
         }
     }
+    log_debug("out notify_new_conn_callback");
 }
-
 
 bool WorkThread::notify_new_msg(intptr_t ptr)
 {
@@ -252,7 +254,7 @@ void WorkThread::bufferevent_read_callback(struct bufferevent *bev, void *user_d
             login_data->work_thread = (intptr_t)work_thread;
             login_data->bev = (intptr_t)bev;
             redisAsyncCommand(work_thread->_redis, redis_login_callback,
-                        (char*)login_data, "GET sToken:%ld", login_data->id);
+                        (char*)login_data, "GET sToken:%ld", login_data->id&0x0000FFFFFFFFFFFF);
             log_debug("%s, bev:%lx", "get login data, start check.", bev);
 
         }
@@ -270,13 +272,21 @@ void WorkThread::bufferevent_read_callback(struct bufferevent *bev, void *user_d
         TransData *trans_data = work_thread->_analyse_req.get_trans_data();
         if (trans_data != NULL){
             trans_data->work_thread = (intptr_t)work_thread;
-            if (work_thread->_sub_map.find(trans_data->from_id) != work_thread->_sub_map.end()){
+            //if (work_thread->_sub_map.find(trans_data->from_id) != work_thread->_sub_map.end()){
+            if (id != 0 && id == trans_data->from_id){
                 log_debug("start transmit message, from_id:%ld to_id:%ld", trans_data->from_id, trans_data->to_id);
-                redisAsyncCommand(work_thread->_redis, redis_trans_callback, 
-                            (char*)trans_data, "SMEMBERS sUD:%ld", trans_data->from_id);
+                if ((id & 0xFFFF000000000000) != 0){  //微信发送，不验证好友关系，直接转发。
+                    if (!work_thread->send_message(trans_data)){
+                        delete []trans_data;
+                    }
+                }
+                else{
+                    redisAsyncCommand(work_thread->_redis, redis_trans_callback, 
+                                (char*)trans_data, "SMEMBERS sUD:%ld", trans_data->from_id);
+                }
             }
             else{  //not login
-                log_debug("find id in map error, from id:%ld, to id:%ld", trans_data->from_id, trans_data->to_id);
+                log_debug("find from id in map error, not login. from id:%ld, to id:%ld", trans_data->from_id, trans_data->to_id);
                 delete []trans_data;
             }
         }
@@ -475,6 +485,22 @@ void WorkThread::redis_trans_callback(redisAsyncContext *c, void *r, void *privd
             }
         }
     }
+}
+
+bool WorkThread::send_message(TransData *trans_data)
+{
+    int j;
+    for (j = 0; j < _work_thread_num; ++j){
+        if (_work_thread[j].work_thread->notify_new_msg((intptr_t)trans_data)){
+            log_debug("transmit message success. from_id:%ld to_id:%ld", trans_data->from_id, trans_data->to_id);
+            break;
+        }
+    }
+    if (j == _work_thread_num){
+        log_debug("transmit message fail. to_id:%ld", trans_data->to_id);
+        return false;
+    }
+    return true;
 }
 
 void WorkThread::redis_online_notify(redisAsyncContext *c, void *r, void *privdata)

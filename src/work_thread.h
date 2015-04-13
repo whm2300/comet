@@ -95,6 +95,7 @@ class WorkThread
         bool setnonblock(int fd);
         bool http_login_check(LoginData *login_data);
         bool http_trans_check(TransData *trans_data);
+        bool send_message(TransData *trans_data);
 
     private:
         struct event_base *_evbase;
