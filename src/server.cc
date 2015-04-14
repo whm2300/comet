@@ -21,7 +21,7 @@
 
 
 Server::Server():_timer_event(NULL), _sigint_event(NULL), 
-    _sigterm_event(NULL), _work_thread(NULL), _work_thread_num(0), _main_thread_id(0)
+    _sigterm_event(NULL), _usr1_event(NULL), _work_thread(NULL), _work_thread_num(0), _main_thread_id(0)
 {}
 
 Server::~Server()
@@ -43,9 +43,21 @@ void Server::analyse_config(std::string &config_path)
     _config_info.max_num_per_thread = pt.get<int>("server.max_num_per_thread");
     _config_info.heartbeat_time = pt.get<int>("server.heartbeat_time");
 
-    _config_info.redis_ip = pt.get<std::string>("redis.ip");
-    _config_info.redis_port = pt.get<int>("redis.port");
-    _config_info.redis_db = pt.get<int>("redis.db_num");
+    std::string ip("redis.ip%d");
+    std::string port("redis.port%d");
+    std::string db_num("redis.db_num%d");
+    char buffer[64];
+    _config_info.redis_info_count = pt.get<int>("redis.redis_info_count");
+    _config_info.cur_conn_index = 0;
+    _config_info.redis_info = new RedisInfo[_config_info.redis_info_count];
+    for (int i = 0; i < _config_info.redis_info_count; i++){
+        sprintf(buffer, ip.c_str(), i);
+        _config_info.redis_info[i].ip = pt.get<std::string>(buffer);
+        sprintf(buffer, port.c_str(), i);
+        _config_info.redis_info[i].port = pt.get<int>(buffer);
+        sprintf(buffer, db_num.c_str(), i);
+        _config_info.redis_info[i].db_num = pt.get<int>(buffer);
+    }
 
     _config_info.http_url = pt.get<std::string>("http.url");
 
@@ -112,10 +124,12 @@ bool Server::init_server()
     log_info("server.work_thread:%d", _config_info.work_thread_num);
     log_info("server.max_num_per_thread:%d", _config_info.max_num_per_thread);
     log_info("server.heartbeat_time:%d", _config_info.heartbeat_time);
-    log_info("redis.ip:%s", _config_info.redis_ip.c_str());
-    log_info("redis.port:%d", _config_info.redis_port);
-    log_info("redis.db_num:%d", _config_info.redis_db);
     log_info("http.url:%s", _config_info.http_url.c_str());
+    for (int i = 0; i < _config_info.redis_info_count; i++){
+        log_info("ip%d:%s", i, _config_info.redis_info[i].ip.c_str());
+        log_info("port%d:%d", i, _config_info.redis_info[i].port);
+        log_info("db_num%d:%d", i, _config_info.redis_info[i].db_num);
+    }
 
 
     return true;
@@ -125,12 +139,13 @@ bool Server::start_work_thread()
 {
     _work_thread_num = _config_info.work_thread_num;
     _work_thread = new PthreadInfo[_work_thread_num];
+    gettimeofday(&_last_connect_time, NULL);
     for (int i = 0; i < _work_thread_num; ++i){
         _work_thread[i].work_thread = new WorkThread();
         if (!_work_thread[i].work_thread->init_work(i+1, _work_thread, _work_thread_num, 
                         _config_info.max_num_per_thread, _config_info.heartbeat_time, _config_info.http_url, _config_info.http_ip)
-                    || !_work_thread[i].work_thread->asy_open_redis(_config_info.redis_ip.c_str(), 
-                _config_info.redis_port, _config_info.redis_db)){
+                    || !_work_thread[i].work_thread->asy_open_redis(_config_info.redis_info[_config_info.cur_conn_index].ip.c_str(), 
+                _config_info.redis_info[_config_info.cur_conn_index].port, _config_info.redis_info[_config_info.cur_conn_index].db_num)){
             log_error("init work thread error. %d", i);
             return false;
         }
@@ -203,6 +218,11 @@ bool Server::init_signal_and_timer()
         log_error("%s", "Could not create/add SIGTERM event");
         return false;
     }
+    _usr1_event = evsignal_new(_evbase, SIGUSR1, reconnect_redis, this);
+    if (_usr1_event == NULL || event_add(_usr1_event, NULL) < 0){
+        log_error("init SIGUSR1 error");
+        return false;
+    }
     _timer_event = event_new(_evbase, -1, EV_PERSIST, del_expire_client, this);
     {
         struct timeval tv;
@@ -266,6 +286,28 @@ void Server::signal_cb(evutil_socket_t sig, short events, void *user_data)
 {
     Server *server = (Server *)user_data;
     server->close_server();
+}
+
+void Server::reconnect_redis(evutil_socket_t sig, short events, void *user_data)
+{
+    Server *server = (Server *)user_data;
+    timeval cur_time;
+    gettimeofday(&cur_time, NULL);
+    if (cur_time.tv_sec - server->_last_connect_time.tv_sec > 10){  //重连时间间隔为10s
+        server->_last_connect_time = cur_time;
+        log_info("redis %d disconnect, start connect redis %d", server->_config_info.cur_conn_index, 
+                    server->_config_info.cur_conn_index = (server->_config_info.cur_conn_index + 1) % server->_config_info.redis_info_count);
+
+        for (int i = 0; i < server->_work_thread_num; i++){
+            if (!server->_work_thread[i].work_thread->asy_open_redis(
+                            server->_config_info.redis_info[server->_config_info.cur_conn_index].ip.c_str(), 
+                            server->_config_info.redis_info[server->_config_info.cur_conn_index].port, 
+                            server->_config_info.redis_info[server->_config_info.cur_conn_index].db_num)){
+                log_error("reconnect error");
+                kill(getpid(), SIGTERM);
+            }
+        }
+    }
 }
 
 void Server::del_expire_client(evutil_socket_t sig, short events, void *user_data)

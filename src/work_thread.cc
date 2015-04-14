@@ -252,9 +252,9 @@ void WorkThread::bufferevent_read_callback(struct bufferevent *bev, void *user_d
         if (login_data != NULL){
             login_data->work_thread = (intptr_t)work_thread;
             login_data->bev = (intptr_t)bev;
-            redisAsyncCommand(work_thread->_redis, redis_login_callback,
+            int a = redisAsyncCommand(work_thread->_redis, redis_login_callback,
                         (char*)login_data, "GET sToken:%ld", login_data->id&0x0000FFFFFFFFFFFF);
-            log_debug("%s, bev:%lx", "get login data, start check.", bev);
+            log_debug("%s, bev:%lx, return:%d", "get login data, start check.", bev, a);
 
         }
 
@@ -280,8 +280,9 @@ void WorkThread::bufferevent_read_callback(struct bufferevent *bev, void *user_d
                     }
                 }
                 else{
-                    redisAsyncCommand(work_thread->_redis, redis_trans_callback, 
-                                (char*)trans_data, "SMEMBERS sUD:%ld", trans_data->from_id);
+                    int a = redisAsyncCommand(work_thread->_redis, redis_trans_callback, 
+                                (char*)trans_data, "SISMEMBER sUD:%ld %ld", trans_data->from_id, trans_data->to_id);
+                    log_debug("----------------------%d", a);
                 }
             }
             else{  //not login
@@ -372,19 +373,21 @@ void WorkThread::redis_connect_callback(const redisAsyncContext *c, int status)
         log_info("redis connect error:%s, exit", c->errstr);
         kill(getpid(), SIGTERM);
     }
-    log_info("%s", "redis connect ok");
-
+    else{
+        log_info("%s", "redis connect ok");
+    }
 }
 
 void WorkThread::redis_disconnect_callback(const redisAsyncContext *c, int status)
 {
     if (status != REDIS_OK){
-        log_info("redis disconnect error:%s", c->errstr);
+        log_error("redis disconnect error:%s", c->errstr);
     }
     else{
-        log_info("%s", "redis disconnect normal");
+        log_error("%s", "redis disconnect normal");
     }
-    kill(getpid(), SIGTERM);
+    //redisAsyncFree(c);
+    kill(getpid(), SIGUSR1);  //redis disconnect. send connect signal
 }
 
 void WorkThread::redis_login_callback(redisAsyncContext *c, void *r, void *privdata)
@@ -457,16 +460,29 @@ void WorkThread::redis_trans_callback(redisAsyncContext *c, void *r, void *privd
     TransData *trans_data = (TransData *)privdata;
     WorkThread *work_thread = (WorkThread *)trans_data->work_thread;
 
-    if (reply == NULL || reply->type != REDIS_REPLY_ARRAY || reply->elements == 0){
+    if (reply == NULL || reply->type != REDIS_REPLY_INTEGER || reply->integer == 0){
         log_debug("trans msg, redis check error, start http, from:%ld, to:%ld", trans_data->from_id, trans_data->to_id);
         if (!work_thread->http_trans_check(trans_data)){
             delete []trans_data;
         }
         return ;
     }
-    else {
-        char to_id_buffer[32];
-        for (size_t i = 0; i < reply->elements; ++i){
+    else {  //exist
+        int j;
+        for (j = 0; j < work_thread->_work_thread_num; ++j){
+            if (work_thread->_work_thread[j].work_thread->notify_new_msg((intptr_t)trans_data)){
+                log_debug("transmit message success. from_id:%ld to_id:%ld", trans_data->from_id, trans_data->to_id);
+                break;
+            }
+        }
+        if (j == work_thread->_work_thread_num){
+            log_info("transmit message fail. to:%ld", trans_data->to_id);
+            delete []trans_data;
+        }
+    }
+    /*
+       char to_id_buffer[32];
+       for (size_t i = 0; i < reply->elements; ++i){
             sprintf(to_id_buffer, "%ld", trans_data->to_id);
             if (strcmp(reply->element[i]->str, to_id_buffer) == 0){
                 int j;
@@ -483,7 +499,7 @@ void WorkThread::redis_trans_callback(redisAsyncContext *c, void *r, void *privd
                 break;
             }
         }
-    }
+        */
 }
 
 bool WorkThread::send_message(TransData *trans_data)
