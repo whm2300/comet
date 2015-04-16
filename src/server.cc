@@ -1,16 +1,8 @@
 #include "server.h"
-#include "log.h"
-#include "shared_data.h"
-#include "work_thread.h"
 
 #include <stdio.h>
-
 #include <string>
 #include <errno.h>
-
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/info_parser.hpp>
-
 #include <signal.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -18,6 +10,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/info_parser.hpp>
+
+#include "log.h"
+#include "shared_data.h"
+#include "work_thread.h"
+#include "work_thread-inl.h"
 
 
 Server::Server():_timer_event(NULL), _sigint_event(NULL), 

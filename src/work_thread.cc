@@ -1,7 +1,5 @@
 #include "work_thread.h"
-#include "log.h"
-#include "shared_data.h"
-#include "subscriber.h"
+#include "work_thread-inl.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -15,9 +13,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
+
+#include "log.h"
+#include "shared_data.h"
+#include "subscriber.h"
 
 WorkThread::WorkThread():_evbase(NULL), _work_num(0), _conn_num(0),_redis(NULL)
 {}

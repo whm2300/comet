@@ -82,10 +82,10 @@ class WorkThread
         bool asy_open_redis(const char *ip, const int port, const int db_num);
 
         //新连接或命令
-        bool notify_new_conn(int fd){return write(_new_conn_fd[1], &fd, sizeof(fd)) == sizeof(fd);}
+        bool notify_new_conn(int fd);
         bool notify_new_msg(intptr_t ptr);
 
-        bool check_id_is_online(uint64_t id){return _sub_map.find(id) != _sub_map.end();}
+        bool check_id_is_online(uint64_t id);
 
         void free_data();
         int get_conn_num(){return _conn_num;}
