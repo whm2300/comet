@@ -1,7 +1,7 @@
 include ../build.mk
 
 OBJS = ../$(OBJS_PATH)/eglcomet.o ../$(OBJS_PATH)/server.o ../$(OBJS_PATH)/log.o ../$(OBJS_PATH)/shared_data.o ../$(OBJS_PATH)/work_thread.o ../$(OBJS_PATH)/analyse_req.o ../$(OBJS_PATH)/comet.pb.o ../$(OBJS_PATH)/subscriber.o
-CFLAGS += -lboost_system -lboost_filesystem
+#CFLAGS += -lboost_system -lboost_filesystem
 
 all:$(OBJS)
 	${CXX} -o ../$(EXE_NAME) ${CFLAGS} ${OBJS} ${CLIBS}

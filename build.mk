@@ -6,6 +6,7 @@ CFLAGS += -g -Wall
 CFLAGS += -lpthread
 CFLAGS += -I "/root/Documents/code/eglcomet_thread/deps/libevent-2.0.21-stable/include"
 CFLAGS += -I "/root/Documents/code/eglcomet_thread/deps/redis"
+CFLAGS += -I "/usr/local/include/boost"
 CFLAGS += -std=c++0x
 
 CLIBS :=
