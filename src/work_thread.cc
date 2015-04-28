@@ -147,16 +147,16 @@ bool WorkThread::notify_new_msg(intptr_t ptr)
             res = write(_new_msg_fd[1], &ptr, sizeof(ptr));
         }while(res == EAGAIN);
         if (res == sizeof(ptr)){
-            log_debug("send new message success. id:%ld", trans_data->to_id);
+            log_debug("send new message success. to id:%ld", trans_data->to_id);
             return true;
         }
         else{
-            log_debug("send new message fail, write error. id:%ld", trans_data->to_id);
+            log_debug("send new message fail, write error. to id:%ld", trans_data->to_id);
             return false;
         }
     }
     else{
-        log_debug("send new message fail, not find sub. id:%ld", trans_data->to_id);
+        log_debug("send new message fail, not find sub. to id:%ld", trans_data->to_id);
         return false;
     }
 } 
@@ -187,7 +187,7 @@ void WorkThread::del_expire_client()
                     offline_info->id = id;
                     offline_info->work_thread = this;
                     redisAsyncCommand(_redis, redis_offline_notify, 
-                                (char*)offline_info, "SMEMBERS sUD:%ld", offline_info->id);
+                                (char*)offline_info, "ZRANGE ssUD:%ld 0 -1", offline_info->id);
                 }
             }
             else{
@@ -201,13 +201,6 @@ void WorkThread::del_expire_client()
 
     //statistical data
     log_info("current bev client size:%d, current id client size:%d", _bev_id.size(), _sub_map.size());
-
-    //test
-    //SubMap::iterator pos = _sub_map.begin();
-    //while (pos != _sub_map.end()){
-    //    log_info("online id:%ld", pos->first);
-    //    ++ pos;
-    //}
 }
 
 void WorkThread::notify_new_msg_callback(evutil_socket_t fd, short event, void *user_data)
@@ -215,12 +208,28 @@ void WorkThread::notify_new_msg_callback(evutil_socket_t fd, short event, void *
     WorkThread *work_thread = (WorkThread *)user_data;
     TransData *trans_data = NULL;
     while (read(fd, &trans_data, sizeof(trans_data)) == sizeof(trans_data)){
-        SubMap::iterator pos = work_thread->_sub_map.find(trans_data->to_id);
-        if (pos != work_thread->_sub_map.end()){
-            struct evbuffer *output = bufferevent_get_output(pos->second->get_bev());
-            if (output != NULL && evbuffer_add(output, trans_data->data, trans_data->data_size) == 0){
-                log_debug("trans msg ok. to id:%ld", trans_data->to_id);
+        if (trans_data->msg_type == 0)  {  //for translate
+            SubMap::iterator pos = work_thread->_sub_map.find(trans_data->to_id);
+            if (pos != work_thread->_sub_map.end()){
+                struct evbuffer *output = bufferevent_get_output(pos->second->get_bev());
+                if (output != NULL && evbuffer_add(output, trans_data->data, trans_data->data_size) == 0){
+                    log_debug("trans msg ok. to id:%ld", trans_data->to_id);
+                }
             }
+        } else if (trans_data->msg_type == 1) {
+            SubMap::iterator sub_pos = work_thread->_sub_map.find(trans_data->to_id);
+            if (sub_pos != work_thread->_sub_map.end()) {
+                IntMap::iterator id_pos = work_thread->_bev_id.find((intptr_t)sub_pos->second->get_bev());
+                if (id_pos != work_thread->_bev_id.end()) {
+                    bufferevent_free((struct bufferevent *)id_pos->first);
+                }
+                work_thread->_bev_id.erase(id_pos);
+                delete sub_pos->second;
+                work_thread->_sub_map.erase(sub_pos);
+                log_debug("delete old id:%ld", trans_data->to_id);
+            }
+        } else {
+            assert(0);
         }
         delete []trans_data;
         trans_data = NULL;
@@ -271,19 +280,20 @@ void WorkThread::bufferevent_read_callback(struct bufferevent *bev, void *user_d
         //trans
         TransData *trans_data = work_thread->_analyse_req.get_trans_data();
         if (trans_data != NULL){
+            trans_data->msg_type = 0;
             trans_data->work_thread = (intptr_t)work_thread;
             //if (work_thread->_sub_map.find(trans_data->from_id) != work_thread->_sub_map.end()){
             if (id != 0 && id == trans_data->from_id){
                 log_debug("start transmit message, from_id:%ld to_id:%ld", trans_data->from_id, trans_data->to_id);
-                if ((id & 0xFFFF000000000000) != 0){  //微信发送，不验证好友关系，直接转发。
+                if ((id & 0xFFFF000000000000) != 0 
+                            || (trans_data->to_id & 0xFFFF000000000000)){  //微信发送，不验证好友关系，直接转发。
                     if (!work_thread->send_message(trans_data)){
                         delete []trans_data;
                     }
                 }
                 else{
-                    int a = redisAsyncCommand(work_thread->_redis, redis_trans_callback, 
-                                (char*)trans_data, "SISMEMBER sUD:%ld %ld", trans_data->from_id, trans_data->to_id);
-                    log_debug("----------------------%d", a);
+                    redisAsyncCommand(work_thread->_redis, redis_trans_callback, 
+                                (char*)trans_data, "ZSCORE ssUD:%ld %ld", trans_data->from_id, trans_data->to_id);
                 }
             }
             else{  //not login
@@ -332,7 +342,7 @@ void WorkThread::bufferevent_event_callback(struct bufferevent *bev, short event
             offline_info->id = id;
             offline_info->work_thread = work_thread;
             redisAsyncCommand(work_thread->_redis, redis_offline_notify, 
-                        (char*)offline_info, "SMEMBERS sUD:%ld", offline_info->id);
+                        (char*)offline_info, "ZRANGE ssUD:%ld 0 -1", offline_info->id);
         }
     }
 }
@@ -415,30 +425,38 @@ void WorkThread::redis_login_callback(redisAsyncContext *c, void *r, void *privd
         unsigned char *rsp_data = NULL;
         if (strcmp(login_data->token.c_str(), reply->str) == 0)
         {
-            //当前线程已存在该id，报错。此检测不能检测到其他线程重复id，服务器可能同时存在相同id登录，落在不同线程。
-            if (work_thread->_sub_map.find(login_data->id) != work_thread->_sub_map.end()){
-                log_info("id already exist. id:%ld", login_data->id);
-                rsp_data = work_thread->_analyse_req.get_login_rsp(false, std::string("id already exist!"), 
-                            work_thread->_ping_time, &rsp_len);
-            }
-            else{  //成功登陆
-                rsp_data = work_thread->_analyse_req.get_login_rsp(true, std::string("200 ok"), 
-                            work_thread->_ping_time, &rsp_len);
-                work_thread->_bev_id[login_data->bev] = login_data->id;
-                Subscriber *sub = new Subscriber;
-                sub->set_id_bev(login_data->id, (struct bufferevent *)login_data->bev);
-                work_thread->_sub_map.insert(std::make_pair<uint64_t, Subscriber *>(login_data->id, sub));
-                log_info("redis login success. id:%ld", login_data->id);
-
-                //发送好友音箱在线状态
-                OnlineInfo *online_info = new OnlineInfo;
-                online_info->bev = (struct bufferevent *)login_data->bev;
-                online_info->work_thread = work_thread;
-                online_info->id = login_data->id;
-                redisAsyncCommand(work_thread->_redis, redis_online_notify, 
-                            (char*)online_info, "SMEMBERS sUD:%ld", login_data->id);
+            SubMap::iterator pos = work_thread->_sub_map.find(login_data->id);
+            if (pos != work_thread->_sub_map.end()){  //已存在相同登录账号，删除。
+                //删除当前线程已存在账号
+                IntMap::iterator sub_pos = work_thread->_bev_id.find((intptr_t)pos->second->get_bev());
+                if (sub_pos != work_thread->_bev_id.end()) {
+                    bufferevent_free((bufferevent *)sub_pos->first);
+                    work_thread->_bev_id.erase(sub_pos);
+                }
+                delete pos->second;
+                work_thread->_sub_map.erase(pos);
 
             }
+            //向其他线程发送通知，存在惊群效应，待优化。
+            for (int j = 0; j < work_thread->_work_thread_num; ++j){
+                work_thread->_work_thread[j].work_thread->notify_del_id(login_data->id);
+            }
+            rsp_data = work_thread->_analyse_req.get_login_rsp(true, std::string("200 ok"), 
+                        work_thread->_ping_time, &rsp_len);
+            work_thread->_bev_id[login_data->bev] = login_data->id;
+            Subscriber *sub = new Subscriber;
+            sub->set_id_bev(login_data->id, (struct bufferevent *)login_data->bev);
+            work_thread->_sub_map.insert(std::make_pair<uint64_t, Subscriber *>(login_data->id, sub));
+            log_info("redis login success. id:%ld", login_data->id);
+
+            //发送好友音箱在线状态
+            OnlineInfo *online_info = new OnlineInfo;
+            online_info->bev = (struct bufferevent *)login_data->bev;
+            online_info->work_thread = work_thread;
+            online_info->id = login_data->id;
+            redisAsyncCommand(work_thread->_redis, redis_online_notify, 
+                        (char*)online_info, "ZRANGE ssUD:%ld 0 -1", login_data->id);
+
         }
         else{  //验证失败
             rsp_data = work_thread->_analyse_req.get_login_rsp(false, std::string("wrong id or token"), 
@@ -481,26 +499,6 @@ void WorkThread::redis_trans_callback(redisAsyncContext *c, void *r, void *privd
             delete []trans_data;
         }
     }
-    /*
-       char to_id_buffer[32];
-       for (size_t i = 0; i < reply->elements; ++i){
-            sprintf(to_id_buffer, "%ld", trans_data->to_id);
-            if (strcmp(reply->element[i]->str, to_id_buffer) == 0){
-                int j;
-                for (j = 0; j < work_thread->_work_thread_num; ++j){
-                    if (work_thread->_work_thread[j].work_thread->notify_new_msg((intptr_t)trans_data)){
-                        log_debug("transmit message success. from_id:%ld to_id:%s", trans_data->from_id, reply->element[i]->str);
-                        break;
-                    }
-                }
-                if (j == work_thread->_work_thread_num){
-                    log_debug("transmit message fail. to:%s", reply->element[i]->str);
-                    delete []trans_data;
-                }
-                break;
-            }
-        }
-        */
 }
 
 bool WorkThread::send_message(TransData *trans_data)
@@ -556,6 +554,7 @@ void WorkThread::redis_online_notify(redisAsyncContext *c, void *r, void *privda
 
                     //存在已经在线的好友音箱，发送当前设备已经登录信息。
                     TransData *trans_data = (TransData *) new char[sizeof(TransData) + on_line_des_len];
+                    trans_data->msg_type = 0;
                     trans_data->from_id = online_info->id;
                     trans_data->to_id = to_id;
                     trans_data->data_size = on_line_des_len;
@@ -579,10 +578,11 @@ void WorkThread::redis_online_notify(redisAsyncContext *c, void *r, void *privda
         int des_len = 0;
         unsigned char des[29 + src_len];
         work_thread->_analyse_req.pack_data(src, src_len, 12, des, des_len);
-        log_debug("src size:%d, des size:%d", src_len, des_len);
 
         struct evbuffer *output = bufferevent_get_output(online_info->bev);
-        evbuffer_add(output, des, des_len);
+        if (output != NULL) {
+            evbuffer_add(output, des, des_len);
+        }
     }
 
     delete online_info;
@@ -619,6 +619,7 @@ void WorkThread::redis_offline_notify(redisAsyncContext *c, void *r, void *privd
                 if (work_thread->_work_thread[j].work_thread->check_id_is_online(to_id)){
                     //存在已经在线的好友音箱，发送当前设备下线信息。
                     TransData *trans_data = (TransData *) new char[sizeof(TransData) + off_line_des_len];
+                    trans_data->msg_type = 0;
                     trans_data->from_id = offline_info->id;
                     trans_data->to_id = to_id;
                     trans_data->data_size = off_line_des_len;
@@ -671,6 +672,23 @@ void WorkThread::http_login_read(struct bufferevent *bev, void *ctx)
         int rsp_len = 0;
         unsigned char *rsp_data = NULL;
         if (r){
+            SubMap::iterator pos = work_thread->_sub_map.find(login_data->id);
+            if (pos != work_thread->_sub_map.end()){  //已存在相同登录账号，删除。
+                //删除当前线程已存在账号
+                IntMap::iterator sub_pos = work_thread->_bev_id.find((intptr_t)pos->second->get_bev());
+                if (sub_pos != work_thread->_bev_id.end()) {
+                    bufferevent_free((bufferevent *)sub_pos->first);
+                    work_thread->_bev_id.erase(sub_pos);
+                }
+                delete pos->second;
+                work_thread->_sub_map.erase(pos);
+
+            }
+            //向其他线程发送通知，存在惊群效应，待优化。
+            for (int j = 0; j < work_thread->_work_thread_num; ++j){
+                work_thread->_work_thread[j].work_thread->notify_del_id(login_data->id);
+            }
+
             rsp_data = work_thread->_analyse_req.get_login_rsp(true, std::string("200 ok"), 
                         work_thread->_ping_time, &rsp_len);
             work_thread->_bev_id[login_data->bev] = login_data->id;
@@ -685,7 +703,7 @@ void WorkThread::http_login_read(struct bufferevent *bev, void *ctx)
             online_info->work_thread = work_thread;
             online_info->id = login_data->id;
             redisAsyncCommand(work_thread->_redis, redis_online_notify, 
-                        (char*)online_info, "SMEMBERS sUD:%ld", login_data->id);
+                        (char*)online_info, "ZRANGE ssUD:%ld 0 -1", login_data->id);
 
         }
         else{  //验证失败
@@ -784,6 +802,19 @@ bool WorkThread::http_trans_check(TransData *trans_data)
     bufferevent_enable(bev, EV_READ | EV_WRITE);
     return true;
 }
+
+void WorkThread::notify_del_id(uint64_t id)
+{
+    if (_sub_map.find(id) != _sub_map.end()) {
+        TransData *del_data = (TransData *)new char[sizeof(TransData)];
+        del_data->msg_type = 1;
+        del_data->to_id = id;
+        if (!notify_new_msg(intptr_t(del_data))) {
+            delete []del_data;
+        }
+    }
+}
+
 
 void WorkThread::http_trans_read(struct bufferevent *bev, void *ctx)
 {

@@ -84,6 +84,7 @@ class WorkThread
         //新连接或命令
         bool notify_new_conn(int fd);
         bool notify_new_msg(intptr_t ptr);
+        void notify_del_id(uint64_t id);
 
         bool check_id_is_online(uint64_t id);
 

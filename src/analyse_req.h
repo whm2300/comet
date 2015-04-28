@@ -22,9 +22,10 @@ typedef struct tagLoginData
 //转发信息包。
 typedef struct tagTransData
 {
-    uint64_t         from_id;
-    uint64_t         to_id;
+    uint64_t        from_id;
+    uint64_t        to_id;
     intptr_t        work_thread;  //src thread
+    int             msg_type;  //消息类型 0 转发 1 删除已登录的to_id
     int             data_size;
     unsigned char   data[0];
 }TransData;
