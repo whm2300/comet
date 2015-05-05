@@ -265,7 +265,6 @@ void WorkThread::bufferevent_read_callback(struct bufferevent *bev, void *user_d
             int a = redisAsyncCommand(work_thread->_redis, redis_login_callback,
                         (char*)login_data, "GET sToken:%ld", login_data->id&0x0000FFFFFFFFFFFF);
             log_debug("%s, bev:%lx, return:%d", "get login data, start check.", bev, a);
-
         }
 
         //heartbeat
@@ -428,6 +427,10 @@ void WorkThread::redis_login_callback(redisAsyncContext *c, void *r, void *privd
             SubMap::iterator pos = work_thread->_sub_map.find(login_data->id);
             if (pos != work_thread->_sub_map.end()){  //已存在相同登录账号，删除。
                 //删除当前线程已存在账号
+                if ((intptr_t)pos->second->get_bev() == login_data->bev) {  //同一个连接多次发送登录包
+                    delete login_data;
+                    return ;
+                }
                 IntMap::iterator sub_pos = work_thread->_bev_id.find((intptr_t)pos->second->get_bev());
                 if (sub_pos != work_thread->_bev_id.end()) {
                     bufferevent_free((bufferevent *)sub_pos->first);
@@ -437,9 +440,10 @@ void WorkThread::redis_login_callback(redisAsyncContext *c, void *r, void *privd
                 work_thread->_sub_map.erase(pos);
 
             }
-            //向其他线程发送通知，存在惊群效应，待优化。
             for (int j = 0; j < work_thread->_work_thread_num; ++j){
-                work_thread->_work_thread[j].work_thread->notify_del_id(login_data->id);
+                if (work_thread->_work_thread[j].work_thread != work_thread) {
+                    work_thread->_work_thread[j].work_thread->notify_del_id(login_data->id);
+                }
             }
             rsp_data = work_thread->_analyse_req.get_login_rsp(true, std::string("200 ok"), 
                         work_thread->_ping_time, &rsp_len);
