@@ -37,7 +37,7 @@ class SingletonLog
     public:
         static SingletonLog *get_instance();
 
-        bool open_log(const std::string& log_path, const std::string &log_level);
+        bool open_log(const std::string& log_folder, const std::string &log_level);
 
         bool close_log();
 
@@ -56,10 +56,10 @@ class SingletonLog
         static SingletonLog *_instance;
 
         int _log_fd;
+        int _old_fd;
         FILE *_file;
 
         LOG_LEVEL _log_level;
-        std::string _base_file_path;
 
         class garbo
         {

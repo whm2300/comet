@@ -8,7 +8,7 @@ import redis
 
 redis_info = {'ip':'192.168.1.12', 'port':9979, 'db':20}
 mongo_info = {'ip':'192.168.1.12', 'port':27017}
-id_count = 2000000
+id_count = 50000
 
 def random_str(len):
     a = list(string.ascii_letters)
@@ -35,8 +35,10 @@ def save_to_redis(id_token):
     r.flushdb()
     for i in id_token:
         r.set('sToken:' + str(i['id']), i['token'])
+        k = 1
         for j in i['relation']:
-            r.sadd('sUD:' + str(i['id']), j)
+            r.zadd('ssUD:' + str(i['id']), k, j)
+            k += 1
     print 'save to redis over'
 
 def save_to_mongo(id_token):
@@ -44,16 +46,16 @@ def save_to_mongo(id_token):
         i.pop('relation')
     db = pymongo.MongoClient(mongo_info["ip"], mongo_info["port"])['comet']
     db['account_a'].drop()
-    db['account_b'].drop()
-    db['account_c'].drop()
-    db['account_d'].drop()
-    db['account_e'].drop()
+    #db['account_b'].drop()
+    #db['account_c'].drop()
+    #db['account_d'].drop()
+    #db['account_e'].drop()
 
-    db['account_a'].insert(id_token[0:2000000:5])
-    db['account_b'].insert(id_token[1:2000000:5])
-    db['account_c'].insert(id_token[2:2000000:5])
-    db['account_d'].insert(id_token[3:2000000:5])
-    db['account_e'].insert(id_token[4:2000000:5])
+    db['account_a'].insert(id_token)
+    #db['account_b'].insert(id_token[1:2000000:5])
+    #db['account_c'].insert(id_token[2:2000000:5])
+    #db['account_d'].insert(id_token[3:2000000:5])
+    #db['account_e'].insert(id_token[4:2000000:5])
     print 'save to mongo over'
             
 

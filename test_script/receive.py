@@ -18,7 +18,7 @@ s.connect(('192.168.1.148', 8888))
 #s.connect(('192.168.1.148', 49356))
 #head = chr(0x15) + chr(0x0) + chr(0x0) + chr(0x0)
 
-from_id = 12345
+from_id = 123456
 to_id = 0
 head = struct.pack("!4B2q", 0x15, 0x0, 0x0, 0x0, from_id, to_id)
 data = struct.pack("!HBH", 10, 1, len(login.SerializeToString())) + login.SerializeToString()

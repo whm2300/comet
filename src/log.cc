@@ -18,22 +18,41 @@ SingletonLog *SingletonLog::get_instance()
 {
     return _instance;
 }
-SingletonLog::SingletonLog():_file(NULL)
+SingletonLog::SingletonLog():_log_fd(0), _old_fd(0), _file(NULL)
 {}
 
 SingletonLog::~SingletonLog()
 {
 }
 
-bool SingletonLog::open_log(const std::string& log_path, const std::string &log_level)
+bool SingletonLog::open_log(const std::string& log_folder, const std::string &log_level)
 {
-    _base_file_path = log_path;
     _log_level = get_log_level(log_level);
 
-    _log_fd = open(_base_file_path.c_str(), O_WRONLY | O_APPEND | O_CREAT,
-                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (_log_fd == -1){
+    time_t time;
+    struct timeval tv;
+    struct tm *tm;
+    gettimeofday(&tv, NULL);
+    time = tv.tv_sec;
+    tm = localtime(&time);
+
+    char log_path[512];
+    int len = sprintf(log_path, "%s/%04d%02d%02d%02d%02d%02d.log", log_folder.c_str(), tm->tm_year + 1900, tm->tm_mon + 1, 
+                tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+    if (len < 0) {
         return false;
+    }
+
+    int log_fd = open(log_path, O_WRONLY | O_APPEND | O_CREAT,
+                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (log_fd == -1){
+        return false;
+    } else {
+        if (_old_fd != 0) {
+            close(_old_fd);
+        }
+        _old_fd = _log_fd;
+        _log_fd = log_fd;
     }
 
     return true;

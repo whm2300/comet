@@ -6,6 +6,7 @@ OBJS = ../$(OBJS_PATH)/eglcomet.o ../$(OBJS_PATH)/server.o ../$(OBJS_PATH)/log.o
 all:$(OBJS)
 	${CXX} -o ../$(EXE_NAME) ${CFLAGS} ${OBJS} ${CLIBS}
 
+
 ../$(OBJS_PATH)/eglcomet.o:eglcomet.cc
 	${CXX} -c ${CFLAGS} eglcomet.cc -o ../$(OBJS_PATH)/eglcomet.o
 

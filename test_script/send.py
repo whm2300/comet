@@ -1,4 +1,4 @@
-#!usr/bin/env python
+#!/usr/bin/env python
 #-*- utf-8 -*-
 
 import socket
@@ -8,8 +8,8 @@ import struct
 import comet_pb2 
 
 login = comet_pb2.C2SLogin()
-login.id = 10000000001
-login.token = 'a69361b1bfdcfa5b604fb62a7132b569'
+login.id = 1000001
+login.token = 'fCqciWmRYIHFVhQzpasoAJbKDrtENBkd'
 login.user_agent = "abcdef"
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -71,7 +71,7 @@ while True:
         print "res:0x%x" % res
 
     while True:
-        time.sleep(5)
+        time.sleep(200)
 
         song = comet_pb2.Song()
         song.song_id = "1111"
@@ -79,8 +79,7 @@ while True:
         song.source = 3
         song.singers = "Michael"
         song.pic_url = "www.hoho.com"
-        head = struct.pack("!4B2q", 0x15, 0x40, 0x0, 0x0, 10000000001, 20000016)
+        head = struct.pack("!4B2q", 0x15, 0x40, 0x0, 0x0, 1000001, 1000000)
         data = struct.pack("!HBH", 22, 1, len(song.SerializeToString())) + song.SerializeToString()
         s.send(head + data)
         print "send ok"
-        time.sleep(100)

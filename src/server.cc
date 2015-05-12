@@ -36,7 +36,7 @@ void Server::analyse_config(std::string &config_path)
     _config_info.pid_file_path = pt.get<std::string>("pidfile");
 
     _config_info.logger_level = pt.get<std::string>("logger.level");
-    _config_info.logger_path = pt.get<std::string>("logger.path");
+    _config_info.logger_folder = pt.get<std::string>("logger.folder");
 
     _config_info.listen = pt.get<int>("server.listen");
     _config_info.work_thread_num = pt.get<int>("server.work_thread");
@@ -88,7 +88,7 @@ bool Server::init_server()
     }
 
     //log
-    if (!SingletonLog::get_instance()->open_log(_config_info.logger_path, _config_info.logger_level)){
+    if (!SingletonLog::get_instance()->open_log(_config_info.logger_folder, _config_info.logger_level)){
         printf("open log error.%s", strerror(errno));
         return false;
     }
@@ -119,7 +119,7 @@ bool Server::init_server()
 
     log_info("pidfile:%s", _config_info.pid_file_path.c_str());
     log_info("logger.level:%s", _config_info.logger_level.c_str());
-    log_info("logger.path:%s", _config_info.logger_path.c_str());
+    log_info("logger.folder:%s", _config_info.logger_folder.c_str());
     log_info("server.listen:%d", _config_info.listen);
     log_info("server.work_thread:%d", _config_info.work_thread_num);
     log_info("server.max_num_per_thread:%d", _config_info.max_num_per_thread);
@@ -223,6 +223,11 @@ bool Server::init_signal_and_timer()
         log_error("init SIGUSR1 error");
         return false;
     }
+    _usr2_event = evsignal_new(_evbase, SIGUSR2, rotate_log, this);
+    if (_usr2_event == NULL || event_add(_usr2_event, NULL) < 0) {
+        log_error("init SIGUSR2 error");
+        return false;
+    }
     _timer_event = event_new(_evbase, -1, EV_PERSIST, del_expire_client, this);
     {
         struct timeval tv;
@@ -286,6 +291,14 @@ void Server::signal_cb(evutil_socket_t sig, short events, void *user_data)
 {
     Server *server = (Server *)user_data;
     server->close_server();
+}
+
+void Server::rotate_log(evutil_socket_t sig, short events, void *user_data)
+{
+    Server *server = (Server *)user_data;
+    if (!SingletonLog::get_instance()->open_log(server->_config_info.logger_folder, server->_config_info.logger_level)){
+        log_error("open log error.%s", strerror(errno));
+    }
 }
 
 void Server::reconnect_redis(evutil_socket_t sig, short events, void *user_data)

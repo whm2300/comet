@@ -26,7 +26,7 @@ const std::string server_ip = "192.168.1.148";
 const int         server_port[10] = {8888, 8889, 8890, 8891, 8892, 8893, 8894, 8895, 8896, 8897};
 
 int         g_count = 60000;
-const int         g_send_msg_sec = 20;
+const int         g_send_msg_sec = 1;
 const int         g_heart_time = 30;
 
 class ConnThread;
@@ -251,7 +251,7 @@ class ConnThread
             ClientVector::iterator pos = conn->_client.begin();
             for (; pos != conn->_client.end(); ++pos){
                 uint64_t base_id = (*pos)->pos->first/5 * 5;
-                for (int i = 0; i < 5; ++i){
+                for (int i = 0; i < 1; ++i){
                     uint64_t to_id = base_id + i;
                     if (to_id != (*pos)->pos->first){
                         sprintf(buffer, "%ld->%ld",(*pos)->pos->first, to_id);

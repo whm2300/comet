@@ -31,6 +31,7 @@ class Server
         static void reconnect_redis(evutil_socket_t sig, short events, void *user_data);
         static void del_expire_client(evutil_socket_t sig, short events, void *user_data);
         static void accept_callback(evutil_socket_t fd, short events, void *user_data);
+        static void rotate_log(evutil_socket_t sig, short events, void *user_data);
 
     public:
         void analyse_config(std::string &config_path);
@@ -53,6 +54,7 @@ class Server
         struct event      *_sigint_event;
         struct event      *_sigterm_event;
         struct event      *_usr1_event;
+        struct event      *_usr2_event;
         struct timeval    _last_connect_time;
 
         PthreadInfo       *_work_thread;

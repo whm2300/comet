@@ -14,7 +14,7 @@ struct Config
 {
     std::string pid_file_path;
     std::string logger_level;
-    std::string logger_path;
+    std::string logger_folder;
     std::string http_url;
     std::string http_ip;
     RedisInfo   *redis_info;

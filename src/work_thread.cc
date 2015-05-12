@@ -483,7 +483,9 @@ void WorkThread::redis_trans_callback(redisAsyncContext *c, void *r, void *privd
     TransData *trans_data = (TransData *)privdata;
     WorkThread *work_thread = (WorkThread *)trans_data->work_thread;
 
-    if (reply == NULL || reply->type != REDIS_REPLY_INTEGER || reply->integer == 0){
+    log_debug("reply:%d, str:%s, type:%d, integer:%d", reply, reply->str, reply->type, reply->integer);
+
+    if (reply->type != REDIS_REPLY_STRING){  //not exit REDIS_REPLY_NIL
         log_debug("trans msg, redis check error, start http, from:%ld, to:%ld", trans_data->from_id, trans_data->to_id);
         if (!work_thread->http_trans_check(trans_data)){
             delete []trans_data;
