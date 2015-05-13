@@ -1,19 +1,19 @@
-CC=gcc
-CXX=g++
+export CC=gcc
+export CXX=g++
 
-CFLAGS :=
-CFLAGS += -g -Wall
-CFLAGS += -lpthread
-CFLAGS += -I "/root/Documents/code/eglcomet_thread/deps/libevent-2.0.21-stable/include"
-CFLAGS += -I "/root/Documents/code/eglcomet_thread/deps/redis"
-CFLAGS += -I "/usr/local/include/boost"
-CFLAGS += -std=c++0x
+export PROJECT_DIR := $(shell /bin/pwd)
 
-CLIBS :=
-CLIBS += "/root/Documents/code/eglcomet_thread/deps/libevent-2.0.21-stable/.libs/libevent.a"
-CLIBS += "/root/Documents/code/eglcomet_thread/deps/protocol/libprotobuf.a"
-CLIBS += "/root/Documents/code/eglcomet_thread/deps/redis/libhiredis.so"
-CLIBS += -lrt -lpthread
+export CXXFLAGS :=
+CXXFLAGS += -g -Wall
+CXXFLAGS += -std=c++0x
+CXXFLAGS += -I $(PROJECT_DIR)/src/include
+#CXXFLAGS += -I "/usr/local/include/boost"
 
-OBJS_PATH=objs
-EXE_NAME=eglcomet
+export LDFLAGS :=
+LDFLAGS += $(PROJECT_DIR)/src/lib/libevent.so
+LDFLAGS += $(PROJECT_DIR)/src/lib/libhiredis.so
+LDFLAGS += -lrt -lpthread -lprotobuf
+LDFLAGS += -lboost_system -lboost_filesystem
+
+export OBJS_PATH = $(PROJECT_DIR)/objs
+export EXE_NAME=eglcomet

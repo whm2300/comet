@@ -2,8 +2,9 @@ include build.mk
 
 all:
 	mkdir -p $(OBJS_PATH)
-	cd src; make
+	cd src/core && $(MAKE) 
 
+.PHONY : clean
 clean:
 	rm -rf $(OBJS_PATH)
-	cd src; make clean
+	cd src/core; make clean

@@ -1,0 +1,2 @@
+手动切割日志文件命令：
+cat eglcomet.pid | xargs kill -SIGUSR2

@@ -1,0 +1,181 @@
+//version V1
+package eglcomet;
+
+//[PropertyID: 1]
+//专用通道(如微信)、管理员登陆请求包 
+message AdminLogin
+{
+    required string id        = 1;  //用户id
+    required string passwd     = 2; //密码
+    optional string user_agent = 3; //设备基本信息
+}
+
+//[PropertyID: 2]
+//专用通道登录应答包
+message AdminResp
+{
+    required int32  code      = 1;           //应答码。(0 成功，1失败。)
+    optional string msg       = 2;           //应答消息。(对应响应码原因)
+    optional int32  port      = 3;           //16bit端口号
+}
+
+//[PropertyID: 10]
+//登录请求包 
+message C2SLogin
+{
+    required int64  id         = 1; //用户id
+    required string token      = 2; //验证token
+    optional string user_agent = 3; //设备基本信息
+}
+
+//[PropertyID: 11]
+//登录应答包
+message S2CLogin
+{
+    required int32  code      = 1;           //应答码。(0 成功，1失败。)
+    optional string msg       = 2;           //应答消息。(对应响应码原因)
+    required int32  ping_time = 3;           //心跳包发送间隔时间，(单位：秒)
+}
+
+//[PropertyID: 12]
+//在线查询包 
+message OnlineStatus
+{
+    repeated string id     = 1; //
+    optional bytes  status = 2; //0:offline 1:online
+}
+
+//[PropertyID: 20]
+//媒体控制包 
+message CtrlMedia
+{
+//    enum cmd_type
+//    {
+//        OPEN = 0;       //打开并播放
+//        PLAY = 1;       //播放
+//        PAUSE = 2;      //暂停
+//        SEEK = 3;       //跳播
+//        VOLUME = 4;     //音量
+//        PREV = 5;       //上一首
+//        NEXT = 6;       //下一首
+//        CURRTIME= 7;    //当前时间
+//        TOTALTIME = 8;  //总时间
+//        LOOPMODE = 9;   //循环模式
+//        PLAYLIST = 10;  //播放列表
+//        RSP_PREPARED = 100; //播放准备就绪
+//        RSP_COMPLETE = 101; //播放结束
+//        RSP_CURRPOS = 102; //播放当前时间
+//        RSP_STATUS = 103;//
+//        RSP_ERROR = 110;    //播放错误
+//    } 
+    required int32    cmd       = 1;  //控制命令
+    repeated string   args      = 2;  //[附录2：控制参数]
+    optional bytes    arg_bytes = 3;  //[附录2：控制参数]
+    optional int32    seq       = 4;  //序号
+}
+
+//[PropertyID: 21]
+message SongList
+{
+    required string song_list_id   = 1;       // 歌单ID或者系统歌单原始ID
+    required int32  song_list_type = 2;       // 歌单类型：1=用户自定义歌单 2=虾米系统歌单，....
+    optional string song_list_name = 3;       // 歌单名称
+    repeated Song   songs          = 4;       // 歌曲列表
+}
+
+//[PropertyID: 22]
+message Song
+{
+    required string song_id   = 1;    // 歌曲ID
+    required string song_name = 2;    // 歌曲名称
+    required int32  source    = 3;    // 歌曲来源：1=虾米音乐，2=百度音乐，3=QQ音乐。
+    optional string singers   = 4;    // 歌手
+    optional string pic_url   = 5;    // 图片
+}
+
+//[PropertyID: 30]
+message Msg
+{
+    required int64   msg_id    = 1;  //消息ID
+    required int32   type      = 2;  // 类型 1：文本 2：语音 3：图片 4.表情
+    repeated string  args      = 3;  //参数1 [附录3：消息留言参数]
+    optional bytes   arg_bytes = 4;  //参数2 [附录3：消息留言参数]
+    optional int64   date      = 5;  //发送时间： 自1970.1.1以来的毫秒数
+}
+
+//[PropertyID: 31]
+//P2D PHONE TO DEVICE 消息查询 
+message MsgQuery
+{
+    optional string opt = 1; //其实无需任何参数
+}
+
+//[PropertyID: 32]
+//消息反馈
+message MsgResp
+{
+    required int64  msg_id = 1; //消息ID
+    required int32  code   = 2; //1:消息已接收 2.消息已下载
+}
+
+//[PropertyID: 33]
+//D2P DEVICE TO PHONE 消息通知  
+message MsgNotify
+{
+    required int32  msg_count   = 1; //消息条数
+    repeated Msg    msg_content = 2; //消息内容
+}
+
+
+//============================================ 根据ID验证token,并设置缓存（推送服务调用）
+message ReqCheckTokenByID{
+    required int64 id = 1;              // 用户ID
+    required string token = 2;          // 用户Token    
+}
+
+message RspCheckTokenByID{
+    required int32  rescode = 1;            // 状态码（定义：0=成功，1=艺果帐号不存在,2=用户token错误，3=其他错误）
+    required string resmsg = 2;         // 消息串
+}
+
+//============================================ 根据ID验证用户和设备间关系,并设置缓存（推送服务调用）
+message  ReqCheckRelationByID{
+    required int64 fromID = 1;          // 发送方ID
+    required int64 toID = 2;            // 接收方ID
+}
+
+message RspCheckRelationByID{
+    required int32  rescode = 1;            // 状态码（定义：0=成功，1=发送方ID不存在,2=接收方ID不存在，3=用户关系错误，4=其他错误）
+    required string resmsg = 2;         // 消息串
+}
+
+//============================================ 请求包与响应包
+message ReqPacket{
+    required int32  mask = 1;               // 掩码值（定义：1=params_gzip，2=params_rsa...位运算）
+    required string udi = 2;                // 设备信息
+    repeated string action = 3;             // 操作（协议更新，在协议名后加版本号，如：RegUser_V2）
+    repeated bytes  params = 4;             // 参数（根据action中定义的操作，上传对应的请求参数）
+    required int32  reqNo = 5;              // 请求顺序号
+    optional int32  chnNo = 6;              // 渠道号（由后台分配给渠道并传入，默认为0）
+    optional int32  chnPos = 7;             // 渠道位置（由后台分配给渠道或SDK传入，确定如：广告位第二个广告等位置信息，默认为0。又如帐号中心，可能会有多个位置可以跳游戏中心，渠道位置会不一样）
+    required int32  clientId = 8;           // 应用的ID（直接与服务端沟通的应用的ID）(定义: 1=帐号账户 , 2= 应用商店 , 3= PcSuite, 4= 桌面, 6001=老人平板游戏中心，6002=老人平板云相册，6003=老人平板账号中心(需付费)
+    optional int32  clientPos = 9;          // 应用的位置（直接与服务端沟通的应用的位置ID，与渠道位置类似）
+    optional string clientVer = 10;         // 应用的版本（应用的版本由通用的版本号规则定义）
+    optional string rsaKeyVer = 11;         // 当前程序的RSA-KEY的版本标识
+}
+message RspPacket{
+    required int32 mask = 1;                // 掩码值（定义：1=params_gzip，2=params_rsa...位运算）
+    required int32  rescode = 2;            // 响应码（定义：0=成功-至少有一个响应的Action，100=异常错误...）
+    required string resmsg = 3;             // 响应消息（成功或失败消息，不为空时则由客户端统一提示）
+    repeated string action = 4;             // 响应操作
+    repeated bytes  params = 5;             // 响应参数
+}
+message RspRsaKey{
+    required string rsaVer = 1;             // RSA版本标识（一般RSA版本标识会比RSA-KEY要短很多，以节省流量）
+    required string rsaKey = 2;             // RSA-KEY ( 格式: n,e )
+}
+enum MaskCode{
+    DEFAULT = 0;
+    PARAMS_GZIP = 1;
+    PARAMS_RSA = 2;
+}
