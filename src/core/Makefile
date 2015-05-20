@@ -10,5 +10,5 @@ $(OBJS_PATH)/%.o : %.cc
 	$(CXX) -c $(CXXFLAGS) $< -o $@
 
 .PHONY : clean
-clean:
+clean :
 	rm -f $(PROJECT_DIR)/$(EXE_NAME)
